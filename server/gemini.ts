@@ -80,42 +80,55 @@ export async function askJanSakhiAI(
   const genAIClient = getGenAIClient();
   if (genAIClient) {
     try {
-      let promptContext = `Selected Language: ${langName}\nUser Question: "${userPrompt}"\n\n`;
+      let promptContext = `Strict Target Language: ${langName}\nUser Question: "${userPrompt}"\n\n`;
       if (structuredGuidance) {
-        promptContext += `Verified Factsheet to ground your answer:\nService: ${structuredGuidance.serviceName}\nWhat it is: ${structuredGuidance.whatItIs}\nEligibility: ${structuredGuidance.whoIsEligible.join(', ')}\nDocuments: ${structuredGuidance.documentsRequired.join(', ')}\nSteps: ${structuredGuidance.steps.join(' -> ')}\nWhere to apply: ${structuredGuidance.whereToApply}\nOfficial Source: ${structuredGuidance.officialSource.name} (${structuredGuidance.officialSource.url})\nHelpline: ${structuredGuidance.officialSource.helpline || 'N/A'}\nNext Step: ${structuredGuidance.nextStep}\n\n`;
+        promptContext += `Verified Scheme Factsheet:\nService: ${structuredGuidance.serviceName}\nWhat it is: ${structuredGuidance.whatItIs}\nEligibility: ${structuredGuidance.whoIsEligible.join(', ')}\nDocuments: ${structuredGuidance.documentsRequired.join(', ')}\nSteps: ${structuredGuidance.steps.join(' -> ')}\nWhere to apply: ${structuredGuidance.whereToApply}\nOfficial Source: ${structuredGuidance.officialSource.name} (${structuredGuidance.officialSource.url})\nHelpline: ${structuredGuidance.officialSource.helpline || 'N/A'}\nNext Step: ${structuredGuidance.nextStep}\n\n`;
       }
 
-      promptContext += `Please respond naturally in ${langName}. Structure the response into the 7 clear parts using simple everyday words and numbered steps.`;
+      promptContext += `CRITICAL INSTRUCTIONS:\n1. Answer the user's exact question: "${userPrompt}".\n2. The entire response MUST be in ${langName} script.\n3. Do NOT repeat any welcome message or generic greeting.\n4. Provide structured, actionable steps, documents needed, and where to apply in everyday words.`;
 
-      const response = await genAIClient.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: promptContext }],
-          },
-        ],
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.2,
-          maxOutputTokens: 800,
-        },
-      });
+      // Try gemini-2.0-flash first, fallback to gemini-1.5-flash
+      let text = '';
+      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await genAIClient.models.generateContent({
+            model: modelName,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: promptContext }],
+              },
+            ],
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.2,
+              maxOutputTokens: 800,
+            },
+          });
+          if (response.text && response.text.trim()) {
+            text = response.text.trim();
+            break;
+          }
+        } catch (mErr: any) {
+          console.warn(`[JanSakhi AI] Model ${modelName} attempt failed:`, mErr?.message || mErr);
+        }
+      }
 
-      const text = response.text || '';
-      return {
-        reply: text,
-        readAloudText: text.replace(/[*#_`]/g, '').trim(),
-        suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
-        structuredGuidance,
-        followUpQuestion: broadIntent ? {
-          question: broadIntent.question,
-          choices: broadIntent.choices,
-        } : undefined,
-      };
+      if (text) {
+        return {
+          reply: text,
+          readAloudText: text.replace(/[*#_`~>•👉]/g, ' ').replace(/\s+/g, ' ').trim(),
+          suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
+          structuredGuidance,
+          followUpQuestion: broadIntent ? {
+            question: broadIntent.question,
+            choices: broadIntent.choices,
+          } : undefined,
+        };
+      }
     } catch (err: any) {
       console.error('[JanSakhi AI] Gemini Live API call error, using resilient fallback:', err?.message || err);
-      // Fall through to resilient fallback
     }
   }
 
@@ -124,7 +137,7 @@ export async function askJanSakhiAI(
     const formattedReply = buildFormatted7PartResponse(structuredGuidance, language);
     return {
       reply: formattedReply,
-      readAloudText: formattedReply.replace(/[*#_`]/g, '').trim(),
+      readAloudText: formattedReply.replace(/[*#_`~>•👉]/g, ' ').replace(/\s+/g, ' ').trim(),
       suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
       structuredGuidance,
       followUpQuestion: broadIntent ? {
@@ -134,19 +147,19 @@ export async function askJanSakhiAI(
     };
   }
 
-  // General fallback response giving real actionable guidance instead of repeating greeting
-  const generalReplies: Record<SupportedLanguage, string> = {
-    te: "నమస్తే అక్కయ్య! ప్రభుత్వ పథకాలకు దరఖాస్తు చేసుకోవడానికి ముందుగా మీ అర్హతలను పరిశీలించండి. రేషన్ కార్డు, ఆధార్ కార్డు, బ్యాంక్ ఖాతా వివరాలు సిద్ధం చేసుకోండి. సమీపంలోని మీసేవ, గ్రామ లేదా వార్డు సచివాలయం లేదా అధికారిక పోర్టల్ ద్వారా దరఖాస్తు చేసుకోవచ్చు.",
-    hi: "नमस्ते बहन! किसी भी सरकारी योजना में आवेदन करने के लिए पहले अपनी पात्रता जांचें। राशन कार्ड, आधार कार्ड और बैंक पासबुक जैसे ज़रूरी दस्तावेज़ तैयार रखें। नजदीकी सीएससी केंद्र, जन सेवा केंद्र या आधिकारिक पोर्टल से आवेदन करें।",
-    en: "Hello sister! To apply for a government scheme, first check your eligibility. Keep your basic documents ready, including your Ration Card, Aadhaar card, and bank passbook. You can apply at your nearest CSC center, MeeSeva center, or the verified official government portal.",
-    ta: "வணக்கம் சகோதரி! அரசு திட்டங்களுக்கு விண்ணப்பிக்க முதலில் உங்கள் தகுதியை சரிபார்க்கவும். ரேஷன் அட்டை, ஆதார் அட்டை மற்றும் வங்கி கணக்கு புத்தகத்தை தயார் செய்து, அருகிலுள்ள இ-சேவை மையம் அல்லது அதிகாரப்பூர்வ இணையதளம் மூலம் விண்ணப்பிக்கவும்.",
-    kn: "ನಮಸ್ಕಾರ ಸಹೋದರಿ! ಸರ್ಕಾರಿ ಯೋಜನೆಗೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಮೊದಲು ನಿಮ್ಮ ಅರ್ಹತೆಯನ್ನು ಪರಿಶೀಲಿಸಿ. ರೇಷನ್ ಕಾರ್ಡ್, ಆಧಾರ್ ಕಾರ್ಡ್ ಮತ್ತು ಬ್ಯಾಂಕ್ ಪಾಸ್ ಬುಕ್ ಸಿದ್ಧವಾಗಿಟ್ಟುಕೊಂಡು ಹತ್ತಿರದ ಗ್ರಾಮ ಒನ್ ಅಥವಾ ಸೇವಾ ಸಿಂಧು ಕೇಂದ್ರದ ಮೂಲಕ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ.",
-    ml: "നമസ്കാരം സഹോദരി! സർക്കാർ പദ്ധതികൾക്ക് അപേക്ഷിക്കുന്നതിന് മുമ്പ് നിങ്ങളുടെ യോഗ്യത പരിശോധിക്കുക. റേഷൻ കാർഡ്, ആധാർ, ബാങ്ക് പാസ്ബുക്ക് എന്നിവ തയ്യാറാക്കി അക്ഷയ കേന്ദ്രം വഴിയോ ഔദ്യോഗിക പോർട്ടൽ വഴിയോ അപേക്ഷിക്കുക.",
-    bn: "নমস্কার বোন! যেকোনো সরকারি প্রকল্পে আবেদন করার আগে নিজের যোগ্যতা যাচাই করুন। রেশন কার্ড, আধার কার্ড ও ব্যাংক পাসবই প্রস্তুত রেখে নিকটবর্তী বাংলা সহায়তা কেন্দ্র বা অফিশিয়াল পোর্টাল থেকে আবেদন করুন।",
-    mr: "नमस्ते ताई! कोणत्याही सरकारी योजनेसाठी अर्ज करण्यापूर्वी तुमची पात्रता तपासा. रेशन कार्ड, आधार कार्ड आणि बँक पासबुक तयार ठेवा आणि जवळच्या आपले सरकार सेवा केंद्रातून किंवा अधिकृत पोर्टलवरून अर्ज करा.",
+  // Specific fallback addressing the user question directly without any repeated greeting
+  const queryFallbacks: Record<SupportedLanguage, string> = {
+    te: `మీరు అడిగిన "${userPrompt}" ప్రశ్నకు సంబంధించి మరింత నిర్దిష్టమైన మార్గదర్శకత్వం కోసం సమీపంలోని గ్రామ లేదా వార్డు సచివాలయం, మీసేవ కేంద్రం లేదా అధికారిక పోర్టల్‌ను సంప్రదించండి.`,
+    hi: `आपके द्वारा पूछे गए प्रश्न "${userPrompt}" के संबंध में विस्तृत जानकारी के लिए कृपया नजदीकी सीएससी केंद्र, जन सेवा केंद्र या आधिकारिक सरकारी पोर्टल से संपर्क करें।`,
+    en: `Regarding your inquiry about "${userPrompt}", please check with your nearest Common Service Centre (CSC) or official government portal for guidelines.`,
+    ta: `நீங்கள் கேட்ட "${userPrompt}" பற்றிய விவரங்களுக்கு அருகிலுள்ள இ-சேவை மையம் அல்லது அதிகாரப்பூர்வ அரசு இணையதளத்தை அணுகவும்.`,
+    kn: `ನೀವು ಕೇಳಿದ "${userPrompt}" ಪ್ರಶ್ನೆಗೆ ಸಂಬಂಧಿಸಿದಂತೆ ಹತ್ತಿರದ ಗ್ರಾಮ ಒನ್ ಅಥವಾ ಅಧಿಕೃತ ಸರ್ಕಾರಿ ಪೋರ್ಟಲ್ ಸಂಪರ್ಕಿಸಿ.`,
+    ml: `നിങ്ങൾ ചോദിച്ച "${userPrompt}" എന്ന ചോദ്യവുമായി ബന്ധപ്പെട്ട് അടുത്തുള്ള അക്ഷയ കേന്ദ്രം അല്ലെങ്കിൽ ഔദ്യോഗിക പോർട്ടൽ സന്ദർശിക്കുക.`,
+    bn: `আপনার "${userPrompt}" সম্পর্কিত প্রশ্নের বিস্তারিত তথ্যের জন্য নিকটবর্তী বাংলা সহায়তা কেন্দ্র বা সরকারি পোর্টাল দেখুন।`,
+    mr: `आपण विचारलेल्या "${userPrompt}" या प्रश्नासाठी जवळच्या आपले सरकार सेवा केंद्र किंवा अधिकृत शासकीय पोर्टलशी संपर्क साधा.`,
   };
 
-  const defaultText = generalReplies[language] || generalReplies.en;
+  const defaultText = queryFallbacks[language] || queryFallbacks.en;
 
   return {
     reply: defaultText,
@@ -300,17 +313,28 @@ Provide output in JSON format with keys:
 "nextStep": string
 `;
 
-      const response = await genAIClient.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-        },
-      });
+      let responseText = '';
+      for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash']) {
+        try {
+          const response = await genAIClient.models.generateContent({
+            model: modelName,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.2,
+              responseMimeType: 'application/json',
+            },
+          });
+          if (response.text) {
+            responseText = response.text;
+            break;
+          }
+        } catch (mErr: any) {
+          console.warn(`[JanSakhi AI] Explain Simply model ${modelName} failed:`, mErr?.message || mErr);
+        }
+      }
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = JSON.parse(responseText || '{}');
       return {
         meaning: parsed.meaning || 'This is official government guidance simplified for you.',
         actions: Array.isArray(parsed.actions) ? parsed.actions : ['Visit nearest LPG agency with documents'],

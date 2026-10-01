@@ -33,7 +33,29 @@ export const App: React.FC = () => {
   // Speech synthesis hook
   const { isPlaying, activeId, speak, stop } = useSpeechSynthesis();
 
-  // Initialize greeting when language changes
+  // One-time automated welcome greeting on session start only
+  useEffect(() => {
+    if (!hasSpokenWelcomeRef.current) {
+      hasSpokenWelcomeRef.current = true;
+      const initialWelcomeText: Record<SupportedLanguage, string> = {
+        te: "జనసఖి AIకి స్వాగతం. నేను మీకు ఎలా సహాయపడగలను?",
+        hi: "जनसखी AI में आपका स्वागत है। मैं आपकी क्या मदद कर सकती हूँ?",
+        en: "Welcome to JanSakhi AI. How can I help you?",
+        ta: "ஜனசகி AI-க்கு நல்வரவு. நான் உங்களுக்கு எவ்வாறு உதவ முடியும்?",
+        kn: "ಜನಸಖಿ AI ಗೆ ಸುಸ್ವಾಗತ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+        ml: "ജനസഖി AI-ലേക്ക് സ്വാഗതം. ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കണം?",
+        bn: "জনসখী এআই-তে স্বাগতম। আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+        mr: "जनसखी AI मध्ये आपले स्वागत आहे. मी आपल्याला कशी मदत करू शकते?",
+      };
+      const welcome = initialWelcomeText[currentLanguage] || initialWelcomeText.en;
+      const timer = setTimeout(() => {
+        speak('welcome-once-intro', welcome, currentLangConfig.speechLocale);
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Update message cards when language changes (DO NOT repeat voice greeting)
   useEffect(() => {
     stop();
     const initialGreetings: Record<SupportedLanguage, string> = {
@@ -41,7 +63,7 @@ export const App: React.FC = () => {
       hi: "नमस्ते बहन! मैं जनसखी एआई हूँ। आपको आवश्यक सरकारी योजनाओं, राशन कार्ड जैसे दस्तावेज़ों, मुफ्त सिलाई प्रशिक्षण और महिला स्वरोजगार के बारे में पूरी जानकारी दूंगी। नीचे दिए गए विकल्पों को चुनें या बोलकर सवाल पूछें।",
       ta: "வணக்கம் சகோதரி! நான் ஜனசகி AI. அரசு திட்டங்கள், குடும்ப அட்டை, இலவச தையல் பயிற்சி மற்றும் மகளிர் சுயஉதவிக் குழுக்கள் பற்றி வழிகாட்ட நான் தயாராக உள்ளேன். பேசுங்கள் அல்லது விருப்பங்களை தேர்வு செய்யவும்.",
       kn: "ನಮಸ್ಕಾರ ಸಹೋದರಿ! ನಾನು ಜನಸಖಿ AI. ಸರ್ಕಾರಿ ಯೋಜನೆಗಳು, ರೇಷನ್ ಕಾರ್ಡ್, ಉಚಿತ ಹೊಲಿಗೆ ತರಬೇತಿ ಮತ್ತು ಮಹಿಳಾ ಸಂಘಗಳ ಬಗ್ಗೆ ನಾನು ಮಾರ್ಗದರ್ಶನ ನೀಡುತ್ತೇನೆ. ಮಾತನಾಡಿ ಅಥವಾ ಆಯ್ಕೆಮಾಡಿ.",
-      ml: "നമസ്കാരം സഹോദരി! ഞാൻ ജനസഖി AI. സർക്കാർ പദ്ധതികൾ, റേഷൻ കാർഡ്, സൗജന്യ തയ്യൽ പരിശീലനം എന്നിവയെക്കുറിച്ച് ഞാൻ സഹായിക്കാം. സംസാരിക്കുക അല്ലെങ്കിൽ തിരഞ്ഞെടുക്കുക.",
+      ml: "നമസ്കാരം സഹೋದരി! ഞാൻ ജനസഖി AI. സർക്കാർ പദ്ധതികൾ, റേഷൻ കാർഡ്, സൗജന്യ തയ്യൽ പരിശീലനം എന്നിവയെക്കുറിച്ച് ഞാൻ സഹായിക്കാം. സംസാരിക്കുക അല്ലെങ്കിൽ തിരഞ്ഞെടുക്കുക.",
       bn: "নমস্কার বোন! আমি জনসখী এআই। সরকারি যোজনা, রেশন কার্ড, সেলাই প্রশিক্ষণ এবং মহিলাদের কাজের সুযোগ সম্পর্কে আপনাকে ধাপে ধাপে সাহায্য করব। কথা বলুন বা বেছে নিন।",
       mr: "नमस्ते ताई! मी जनसखी AI आहे. सरकारी योजना, रेशन कार्ड, मोफत शिलाई प्रशिक्षण आणि महिला बचत गटांबद्दल मी तुम्हाला टप्प्याटप्प्याने मार्गदर्शन करेन. बोला किंवा पर्याय निवडा.",
       en: "Hello sister! I am JanSakhi AI — your guide for essential government services, documents, free skill training, and women's livelihood. Tap an option below or speak in your language.",
@@ -89,6 +111,7 @@ export const App: React.FC = () => {
     setMessages((prev) => [...prev, userMsg]);
 
     const handleVoiceResponse = (msgId: string, speechText: string) => {
+      stop();
       if (isVoice) {
         setVoiceState('speaking');
         speak(msgId, speechText, currentLangConfig.speechLocale, () => {

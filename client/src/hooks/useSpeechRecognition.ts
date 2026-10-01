@@ -103,6 +103,23 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
       recognitionRef.current = null;
     }
 
+    const hasDeliveredRef = { current: false };
+
+    const deliverResult = (textToDeliver: string) => {
+      if (hasDeliveredRef.current) return;
+      const clean = textToDeliver.trim();
+      if (!clean) return;
+      hasDeliveredRef.current = true;
+      finalSpokenTextRef.current = '';
+      clearTimers();
+      setTranscript(clean);
+      setSpeechState('processing');
+      if (callbackRef.current) {
+        callbackRef.current(clean);
+      }
+      setTimeout(() => setSpeechState('idle'), 300);
+    };
+
     try {
       const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const recognition = new SpeechRecognitionClass();
@@ -117,9 +134,7 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
         setErrorCode(null);
 
         // Safety Timeout: Never allow the interface to remain stuck in "listening"
-        // 10-second hard session timeout
         timeoutRef.current = setTimeout(() => {
-          console.warn('[JanSakhi Voice] Session timeout reached.');
           if (!finalSpokenTextRef.current.trim()) {
             setSpeechState('error');
             setErrorCode('no-speech');
@@ -127,13 +142,15 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
               recognition.abort();
             } catch (_) {}
           } else {
-            stopListening();
+            deliverResult(finalSpokenTextRef.current);
+            try {
+              recognition.stop();
+            } catch (_) {}
           }
         }, 10000);
       };
 
       recognition.onspeechstart = () => {
-        // Reset silence timeout while user is talking
         if (silenceTimeoutRef.current) {
           clearTimeout(silenceTimeoutRef.current);
         }
@@ -158,15 +175,7 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
         setTranscript(interimText || finalSpokenTextRef.current);
 
         if (isFinal && finalSpokenTextRef.current.trim()) {
-          clearTimers();
-          setSpeechState('processing');
-          const spoken = finalSpokenTextRef.current.trim();
-          if (callbackRef.current) {
-            callbackRef.current(spoken);
-          }
-          setTimeout(() => {
-            setSpeechState('idle');
-          }, 300);
+          deliverResult(finalSpokenTextRef.current);
         }
       };
 
@@ -177,20 +186,14 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
         if (event.error === 'not-allowed' || event.error === 'permission-denied') {
           setErrorCode('not-allowed');
         } else if (event.error === 'no-speech') {
-          // If some transcript was captured despite no-speech at the end, deliver it
           if (finalSpokenTextRef.current.trim()) {
-            setSpeechState('processing');
-            if (callbackRef.current) {
-              callbackRef.current(finalSpokenTextRef.current.trim());
-            }
-            setTimeout(() => setSpeechState('idle'), 300);
+            deliverResult(finalSpokenTextRef.current);
             return;
           }
           setErrorCode('no-speech');
         } else if (event.error === 'network') {
           setErrorCode('network');
         } else if (event.error === 'aborted') {
-          // Don't show generic error on intentional abort
           setSpeechState('idle');
           return;
         } else {
@@ -201,13 +204,8 @@ export function useSpeechRecognition(onResultCallback?: (text: string) => void):
 
       recognition.onend = () => {
         clearTimers();
-        // If we finished and have text, deliver it
         if (finalSpokenTextRef.current.trim()) {
-          setSpeechState('processing');
-          if (callbackRef.current) {
-            callbackRef.current(finalSpokenTextRef.current.trim());
-          }
-          setTimeout(() => setSpeechState('idle'), 300);
+          deliverResult(finalSpokenTextRef.current);
         } else {
           setSpeechState((prev) => (prev === 'listening' ? 'idle' : prev));
         }
