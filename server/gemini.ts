@@ -70,17 +70,6 @@ export async function askJanSakhiAI(
 
   // 1. SMART FOLLOW-UP CHECK: Check if the user is asking a broad question
   const broadIntent = detectBroadIntent(userPrompt, language);
-  if (broadIntent) {
-    return {
-      reply: broadIntent.question,
-      readAloudText: broadIntent.question,
-      suggestedFollowUps: broadIntent.choices.map((c) => c.label),
-      followUpQuestion: {
-        question: broadIntent.question,
-        choices: broadIntent.choices,
-      },
-    };
-  }
 
   // 2. SPECIFIC SERVICE MATCHING: Check if user inquiry targets a known catalog service
   const matchedService = findMatchingService(userPrompt);
@@ -115,8 +104,12 @@ export async function askJanSakhiAI(
       return {
         reply: text,
         readAloudText: text.replace(/[*#_`]/g, '').trim(),
-        suggestedFollowUps: getFollowUpsForLanguage(language),
+        suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
         structuredGuidance,
+        followUpQuestion: broadIntent ? {
+          question: broadIntent.question,
+          choices: broadIntent.choices,
+        } : undefined,
       };
     } catch (err: any) {
       console.error('[JanSakhi AI] Gemini Live API call error, using resilient fallback:', err?.message || err);
@@ -129,22 +122,26 @@ export async function askJanSakhiAI(
     const formattedReply = buildFormatted7PartResponse(structuredGuidance, language);
     return {
       reply: formattedReply,
-      readAloudText: `${structuredGuidance.serviceName}. ${structuredGuidance.whatItIs} ${structuredGuidance.nextStep}`,
-      suggestedFollowUps: getFollowUpsForLanguage(language),
+      readAloudText: formattedReply.replace(/[*#_`]/g, '').trim(),
+      suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
       structuredGuidance,
+      followUpQuestion: broadIntent ? {
+        question: broadIntent.question,
+        choices: broadIntent.choices,
+      } : undefined,
     };
   }
 
-  // General fallback response
+  // General fallback response giving real actionable guidance instead of repeating greeting
   const generalReplies: Record<SupportedLanguage, string> = {
-    te: "నమస్తే అక్కయ్య! నేను మీ జనసఖి AI. ప్రభుత్వ పథకాలు (ఉజ్జ్వల ఉచిత గ్యాస్), పత్రాలు (రేషన్ కార్డు), నైపుణ్యాలు (ఉచిత టైలరింగ్) మరియు మహిళా స్వయం ఉపాధి (లక్షాధికారి దీదీ) గురించి మీకు సులభంగా మార్గనిర్దేశం చేస్తాను. మీకు ఏ సహాయం కావాలి?",
-    hi: "नमस्ते बहन! मैं जनसखी एआई हूँ। सरकारी योजनाओं (उज्ज्वला मुफ्त गैस), दस्तावेज़ (राशन कार्ड), कौशल (मुफ्त सिलाई), और महिला रोजगार (लखपति दीदी) के बारे में आपको आसान भाषा में जानकारी दूंगी। आप क्या जानना चाहती हैं?",
-    en: "Hello sister! I am JanSakhi AI. I can guide you through essential government schemes (PM Ujjwala free gas), documents (Ration Card), skills (free tailoring), and women's livelihood (Lakhpati Didi). What would you like help with today?",
-    ta: "வணக்கம் சகோதரி! அரசு திட்டங்கள் (இலவச எரிவாயு), குடும்ப அட்டை, தையல் பயிற்சி மற்றும் மகளிர் சுயஉதவிக் குழுக்கள் பற்றி வழிகாட்ட நான் தயாராக உள்ளேன்.",
-    kn: "ನಮಸ್ಕಾರ ಸಹೋದರಿ! ಸರ್ಕಾರಿ ಯೋಜನೆಗಳು (ಉಚಿತ ಗ್ಯಾಸ್), ರೇಷನ್ ಕಾರ್ಡ್, ಉಚಿತ ಹೊಲಿಗೆ ತರಬೇತಿ ಮತ್ತು ಮಹಿಳಾ ಸಂಘಗಳ ಬಗ್ಗೆ ನಾನು ಮಾರ್ಗದರ್ಶನ ನೀಡುತ್ತೇನೆ.",
-    ml: "നമസ്കാരം സഹോദരി! സർക്കാർ പദ്ധതികൾ (സൗജന്യ ഗ്യാസ്), റേഷൻ കാർഡ്, സൗജന്യ തയ്യൽ പരിശീലനം എന്നിവയെക്കുറിച്ച് ഞാൻ സഹായിക്കാം.",
-    bn: "নমস্কার বোন! সরকারি যোজনা (বিনামূল্যে গ্যাস), রেশন কার্ড, সেলাই প্রশিক্ষণ এবং মহিলাদের কাজের সুযোগ সম্পর্কে আপনাকে সাহায্য করতে পারি।",
-    mr: "नमस्ते ताई! सरकारी योजना (मोफत गॅस), रेशन कार्ड, मोफत शिलाई प्रशिक्षण आणि महिला बचत गटांबद्दल मी तुम्हाला मार्गदर्शन करू शकते.",
+    te: "నమస్తే అక్కయ్య! ప్రభుత్వ పథకాలకు దరఖాస్తు చేసుకోవడానికి ముందుగా మీ అర్హతలను పరిశీలించండి. రేషన్ కార్డు, ఆధార్ కార్డు, బ్యాంక్ ఖాతా వివరాలు సిద్ధం చేసుకోండి. సమీపంలోని మీసేవ, గ్రామ లేదా వార్డు సచివాలయం లేదా అధికారిక పోర్టల్ ద్వారా దరఖాస్తు చేసుకోవచ్చు.",
+    hi: "नमस्ते बहन! किसी भी सरकारी योजना में आवेदन करने के लिए पहले अपनी पात्रता जांचें। राशन कार्ड, आधार कार्ड और बैंक पासबुक जैसे ज़रूरी दस्तावेज़ तैयार रखें। नजदीकी सीएससी केंद्र, जन सेवा केंद्र या आधिकारिक पोर्टल से आवेदन करें।",
+    en: "Hello sister! To apply for a government scheme, first check your eligibility. Keep your basic documents ready, including your Ration Card, Aadhaar card, and bank passbook. You can apply at your nearest CSC center, MeeSeva center, or the verified official government portal.",
+    ta: "வணக்கம் சகோதரி! அரசு திட்டங்களுக்கு விண்ணப்பிக்க முதலில் உங்கள் தகுதியை சரிபார்க்கவும். ரேஷன் அட்டை, ஆதார் அட்டை மற்றும் வங்கி கணக்கு புத்தகத்தை தயார் செய்து, அருகிலுள்ள இ-சேவை மையம் அல்லது அதிகாரப்பூர்வ இணையதளம் மூலம் விண்ணப்பிக்கவும்.",
+    kn: "ನಮಸ್ಕಾರ ಸಹೋದರಿ! ಸರ್ಕಾರಿ ಯೋಜನೆಗೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಮೊದಲು ನಿಮ್ಮ ಅರ್ಹತೆಯನ್ನು ಪರಿಶೀಲಿಸಿ. ರೇಷನ್ ಕಾರ್ಡ್, ಆಧಾರ್ ಕಾರ್ಡ್ ಮತ್ತು ಬ್ಯಾಂಕ್ ಪಾಸ್ ಬುಕ್ ಸಿದ್ಧವಾಗಿಟ್ಟುಕೊಂಡು ಹತ್ತಿರದ ಗ್ರಾಮ ಒನ್ ಅಥವಾ ಸೇವಾ ಸಿಂಧು ಕೇಂದ್ರದ ಮೂಲಕ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ.",
+    ml: "നമസ്കാരം സഹോദരി! സർക്കാർ പദ്ധതികൾക്ക് അപേക്ഷിക്കുന്നതിന് മുമ്പ് നിങ്ങളുടെ യോഗ്യത പരിശോധിക്കുക. റേഷൻ കാർഡ്, ആധാർ, ബാങ്ക് പാസ്ബുക്ക് എന്നിവ തയ്യാറാക്കി അക്ഷയ കേന്ദ്രം വഴിയോ ഔദ്യോഗിക പോർട്ടൽ വഴിയോ അപേക്ഷിക്കുക.",
+    bn: "নমস্কার বোন! যেকোনো সরকারি প্রকল্পে আবেদন করার আগে নিজের যোগ্যতা যাচাই করুন। রেশন কার্ড, আধার কার্ড ও ব্যাংক পাসবই প্রস্তুত রেখে নিকটবর্তী বাংলা সহায়তা কেন্দ্র বা অফিশিয়াল পোর্টাল থেকে আবেদন করুন।",
+    mr: "नमस्ते ताई! कोणत्याही सरकारी योजनेसाठी अर्ज करण्यापूर्वी तुमची पात्रता तपासा. रेशन कार्ड, आधार कार्ड आणि बँक पासबुक तयार ठेवा आणि जवळच्या आपले सरकार सेवा केंद्रातून किंवा अधिकृत पोर्टलवरून अर्ज करा.",
   };
 
   const defaultText = generalReplies[language] || generalReplies.en;
@@ -152,7 +149,11 @@ export async function askJanSakhiAI(
   return {
     reply: defaultText,
     readAloudText: defaultText,
-    suggestedFollowUps: getFollowUpsForLanguage(language),
+    suggestedFollowUps: broadIntent ? broadIntent.choices.map((c) => c.label) : getFollowUpsForLanguage(language),
+    followUpQuestion: broadIntent ? {
+      question: broadIntent.question,
+      choices: broadIntent.choices,
+    } : undefined,
   };
 }
 

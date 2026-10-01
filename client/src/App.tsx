@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SupportedLanguage, ChatMessage, ServiceCategory } from '../../shared/types';
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from './constants/languages';
 import { UI_LOCALES } from './constants/uiStrings';
@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [hasSpokenPreviously, setHasSpokenPreviously] = useState<boolean>(false);
+  const hasSpokenWelcomeRef = useRef<boolean>(false);
 
   const strings = UI_LOCALES[currentLanguage] || UI_LOCALES.te;
   const currentLangConfig = SUPPORTED_LANGUAGES.find((l) => l.code === currentLanguage) || SUPPORTED_LANGUAGES[0];
@@ -98,25 +99,7 @@ export const App: React.FC = () => {
       }
     };
 
-    // 1. Check Broad Intent immediately
-    const broadIntent = detectClientBroadIntent(text, currentLanguage);
-    if (broadIntent) {
-      const followUpMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'assistant',
-        content: broadIntent.question,
-        readAloudText: broadIntent.question,
-        suggestedActions: broadIntent.choices.map((c) => c.label),
-        followUpQuestion: {
-          question: broadIntent.question,
-          choices: broadIntent.choices,
-        },
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, followUpMsg]);
-      handleVoiceResponse(followUpMsg.id, followUpMsg.readAloudText || followUpMsg.content);
-      return;
-    }
+
 
     // 2. Check Matching Service Catalog
     const matchedService = findMatchingClientService(text);
