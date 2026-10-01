@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { inspectAndSanitizeInput } from './guardrails.js';
 import { askJanSakhiAI, explainSimplyAI } from './gemini.js';
@@ -247,7 +248,13 @@ app.post('/api/journey/check-eligibility', (req: Request, res: Response) => {
 });
 
 // Production client static assets serving
-const clientDistPath = path.resolve(__dirname, '../dist/client');
+const possibleDistPaths = [
+  path.resolve(__dirname, '..'), // When running dist/server/index.js -> dist
+  path.resolve(__dirname, '../client'), // dist/client
+  path.resolve(__dirname, '../dist/client'),
+  path.resolve(__dirname, '../../dist'),
+];
+const clientDistPath = possibleDistPaths.find((p) => fs.existsSync(path.join(p, 'index.html'))) || path.resolve(__dirname, '..');
 app.use(express.static(clientDistPath));
 
 app.get('*', (req: Request, res: Response) => {

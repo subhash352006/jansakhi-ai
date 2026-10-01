@@ -9,6 +9,7 @@
     "dev": "tsx server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
     "build:client": "vite build",
+    "vercel-build": "vite build",
     "start": "node dist/server/index.js",
     "test": "vitest run"
   },
