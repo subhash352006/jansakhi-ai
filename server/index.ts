@@ -280,6 +280,11 @@ app.get('*', (req: Request, res: Response) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`[JanSakhi AI] Server listening on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[JanSakhi AI] Server listening on port ${PORT}`);
+  });
+}
+
+export default app;
+export { app };

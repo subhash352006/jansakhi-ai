@@ -38,16 +38,17 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   mr: 'Marathi (मराठी)',
 };
 
-// Check if live API key is available
-const apiKey = process.env.GEMINI_API_KEY?.trim() || '';
-const isMockMode = process.env.MOCK_AI === 'true' || !apiKey || apiKey === 'your_gemini_api_key_here';
-
-let genAIClient: GoogleGenAI | null = null;
-if (!isMockMode) {
+// Helper to get GoogleGenAI client reading strictly from GEMINI_API_KEY
+function getGenAIClient(): GoogleGenAI | null {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey || apiKey === 'your_gemini_api_key_here' || process.env.MOCK_AI === 'true') {
+    return null;
+  }
   try {
-    genAIClient = new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey });
   } catch (err) {
-    console.warn('[JanSakhi AI] Failed to initialize Google GenAI SDK, falling back to mock mode:', err);
+    console.warn('[JanSakhi AI] Failed to initialize Google GenAI SDK with GEMINI_API_KEY:', err);
+    return null;
   }
 }
 
@@ -76,7 +77,8 @@ export async function askJanSakhiAI(
   const structuredGuidance = matchedService ? getStructuredGuidance(matchedService, language) : undefined;
 
   // 3. LIVE GEMINI 2.5 FLASH INVOCATION
-  if (!isMockMode && genAIClient) {
+  const genAIClient = getGenAIClient();
+  if (genAIClient) {
     try {
       let promptContext = `Selected Language: ${langName}\nUser Question: "${userPrompt}"\n\n`;
       if (structuredGuidance) {
@@ -274,7 +276,8 @@ export async function explainSimplyAI(
 ): Promise<ExplainSimplyResult> {
   const langName = LANGUAGE_NAMES[language] || 'Telugu';
 
-  if (!isMockMode && genAIClient) {
+  const genAIClient = getGenAIClient();
+  if (genAIClient) {
     try {
       const prompt = `You are JanSakhi AI. A first-time citizen with little digital or bureaucratic knowledge needs this government text simplified.
 Target Language: ${langName}
